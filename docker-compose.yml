@@ -12,6 +12,7 @@ services:
 
   api:
     build: .
+    image: app-health-checker:latest
     deploy:
       replicas: 3
     healthcheck:
@@ -22,11 +23,33 @@ services:
       start_period: 10s
     environment:
       - PYTHONBUFFERED=1
-      - CHECK_PATH=/app
-      - REDIS_HOST=redis-db
+      - CHECK_PATH=${CHECK_PATH}
+      - REDIS_HOST=${REDIS_HOST}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
     depends_on:
       - redis-db
+
+  worker:
+    image: app-health-checker:latest
+    deploy:
+      replicas: 1
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CHECK_PATH=${CHECK_PATH}
+      - REDIS_HOST=${REDIS_HOST}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL}
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    command: celery -A tasks worker --loglevel=info
+    depends_on:
+      - redis-db
+
+  dashboard:
+    image: mher/flower:latest
+    command: celery --broker=${CELERY_BROKER_URL} flower --port=5555
+    ports:
+      - "5555:5555"
 
   redis-db:
     image: redis:8-alpine

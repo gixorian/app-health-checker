@@ -1,7 +1,8 @@
-from fastapi import FastAPI, Response, status
-from health_check import check_path
 import os
 import redis
+from fastapi import FastAPI, Response, status
+from health_check import check_path
+from tasks import process
 
 app = FastAPI()
 
@@ -38,3 +39,11 @@ def health_endpoint(response: Response, path: str = ""):
         r.incr("unhealthy_count")
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "unhealthy", "reason": "Path not found"}
+
+
+@app.get("/process", status_code=202)
+def process_endpoint(response: Response):
+    process.delay()  # type: ignore
+    response.status_code = status.HTTP_202_ACCEPTED
+    queue_length = r.llen("celery")
+    return {"order in queue": queue_length, "status": "working"}
