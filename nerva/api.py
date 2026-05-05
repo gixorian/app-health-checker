@@ -35,9 +35,18 @@ def get_task_status(task_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/history", response_model=List[TaskSchema])
-def get_all_tasks(limit: int = 10, db: Session = Depends(get_db)):
+def get_all_tasks(
+    limit: int = 10, status: str | None = None, db: Session = Depends(get_db)
+):
+    query = db.query(TaskRecord).order_by(TaskRecord.created_at.desc())
+
+    if status is not None:
+        query = query.filter(TaskRecord.status == status)
+
+    tasks = query.limit(limit).all()
     return (
-        db.query(TaskRecord).order_by(TaskRecord.created_at.desc()).limit(limit).all()
+        tasks
+        # db.query(TaskRecord).order_by(TaskRecord.created_at.desc()).limit(limit).all()
     )
 
 
