@@ -1,14 +1,33 @@
+from operator import add
 import requests
 import argparse
 import time
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.live import Live
+from rich import box
 
-
+console = Console()
 API_URL = "http://localhost"
 
 YELLOW = "\033[93m"
 GREEN = "\033[92m"
 RED = "\033[91m"
 RESET = "\033[0m"
+
+
+def add_watch_args(parser):
+    parser.add_argument(
+        "-w",
+        "--watch",
+        dest="watch",
+        type=float,
+        nargs="?",
+        const=1.0,
+        help="Watch mode: refresh every N seconds (default: 1.0)",
+    )
+
 
 parser = argparse.ArgumentParser(description="Nerva Engine CLI tools")
 
@@ -28,10 +47,13 @@ purge_parser = subparsers.add_parser(
     "purge", help="Delete all data from the PostgreSQL database"
 )
 
+add_watch_args(history_parser)
+add_watch_args(status_parser)
+
 history_parser.add_argument(
     "-l",
     "--limit",
-    help="Return a max of N amount of tasks",
+    help="Number of latest tasks to show. Use -1 to show all.",
     type=int,
     default=10,
     metavar="N",
@@ -44,15 +66,21 @@ history_parser.add_argument(
     choices=["PENDING", "WORKING", "COMPLETED", "FAILED"],
 )
 history_parser.add_argument(
-    "-w",
-    "--watch",
-    help="Refresh the output table every S seconds (default = 5)",
-    type=int,
-    default=5,
-    metavar="S",
+    "-v", "--verbose", action="store_true", help="Show all columns from the tasks table"
 )
 history_parser.add_argument(
-    "-v", "--verbose", action="store_true", help="Show all columns from the tasks table"
+    "-a",
+    "--after",
+    type=str,
+    help="Show tasks after this date/time",
+    metavar='"YYYY-MM-DD HH:MM:SS"',
+)
+history_parser.add_argument(
+    "-b",
+    "--before",
+    type=str,
+    help="Show tasks before this date/time",
+    metavar='"YYYY-MM-DD HH:MM:SS"',
 )
 
 # === Status command ===
@@ -74,41 +102,104 @@ trigger_parser.add_argument(
 args = parser.parse_args()
 
 
-def get_history(verbose: bool):
-    query_params = {}
+def get_history(
+    verbose: bool,
+    limit: int,
+    status: str | None = None,
+    before: str | None = None,
+    after: str | None = None,
+):
+    query_params = {"limit": limit, "status": status, "before": before, "after": after}
 
-    if args.limit:
-        query_params["limit"] = args.limit
-        # url += f"?limit={args.limit}"
+    try:
+        response = requests.get(f"{API_URL}/history", params=query_params)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] Could not fetch history. {e}")
+        return
 
-    if args.status:
-        query_params["status"] = args.status
+    if not data:
+        console.print("[yellow]No tasks found in history.[/yellow]")
+        return
 
-    response = requests.get(f"{API_URL}/history", params=query_params)
-    data = response.json()
+    table = Table(
+        title="[bold magenta]Nerva Task History[/bold magenta]",
+        box=box.ROUNDED,
+        header_style="bold cyan",
+    )
+
+    table.add_column("ID", justify="right", style="dim")
+
+    if verbose:
+        table.add_column("Task Type", style="blue")
+        table.add_column("Created At", style="dim", no_wrap=True)
+
+    table.add_column("Status", justify="left")
+    table.add_column("Result")
 
     for task in data:
-        if not verbose:
-            print(f"{task['id']}, {task['status']}, {task['result']}")
-        else:
-            print(
-                f"{task['id']}, {task['status']}, {task['result']}, {task['task_type']}, {task['created_at']}"
-            )
+        status = task.get("status", "UNKNOWN")
+        status_colors = {
+            "COMPLETED": "green",
+            "FAILED": "red",
+            "WORKING": "yellow",
+            "PENDING": "cyan",
+        }
+        color = status_colors.get(status, "white")  # type: ignore
+
+        row = [str(task.get("id"))]
+
+        if verbose:
+            row.append(task.get("task_type", "N/A"))
+            created = task.get("created_at", "N/A").replace("T", " ")[:19]
+            row.append(created)
+
+        row.append(f"[{color}]{status}[/]")
+
+        result = task.get("result") or task.get("payload", "")
+        row.append(str(result))
+
+        table.add_row(*row)
+
+    # console.print("\n", table, "\n")
+    return table
 
 
 def get_task_status(id: int):
     response = requests.get(f"{API_URL}/status/{id}")
 
     if response.status_code == 404:
-        print(f"{RED}Error:{RESET} Task {id} does not exist in the database.")
+        console.print(
+            f"[bold red]Error:[/bold red] Task {id} does not exist in the database."
+        )
         return
 
     if response.status_code != 200:
-        print(f"{YELLOW}Unexpected error:{RESET} {response.status_code}")
+        console.print(f"[yellow]Unexpected error:[/yellow] {response.status_code}")
         return
 
     task = response.json()
-    print(f"{task['id']}, {task['status']}, {task['result']}")
+
+    status_colors = {
+        "COMPLETED": "green",
+        "FAILED": "red",
+        "WORKING": "yellow",
+        "PENDING": "cyan",
+    }
+    color = status_colors.get(task["status"], "white")
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_row("Task ID:", str(task["id"]))
+    table.add_row("Type:", task.get("task_type", "N/A"))
+    table.add_row("Status:", f"[{color} bold]{task['status']}[/]")
+    table.add_row("Created:", task.get("created_at", "").replace("T", " ")[:19])
+
+    res = task.get("result") or "No output yet."
+    table.add_row("Result:", f"[italic]{res}[/]")
+
+    # console.print(Panel(table, title=f"[bold]Task {id}[/]", expand=False, style=color))
+    return Panel(table, title=f"[bold]Task {id}[/]", expand=False, style=color)
 
 
 def trigger_task(task_name, param_list):
@@ -138,7 +229,7 @@ def trigger_task(task_name, param_list):
         task_data = response.json()
         task_id = task_data.get("id")
 
-        time.sleep(0.5)
+        time.sleep(0.1)
 
         status_response = requests.get(f"{API_URL}/status/{task_id}")
         status_data = status_response.json()
@@ -155,10 +246,44 @@ def trigger_task(task_name, param_list):
 
 # Checking subparser commands
 if args.command == "history":
-    get_history(args.verbose)
+    if args.watch:
+        with Live(
+            get_history(args.verbose, args.limit, args.status, args.before, args.after),
+            console=console,
+        ) as live:
+            try:
+                while True:
+                    time.sleep(args.watch)
+                    live.update(
+                        get_history(  # type: ignore
+                            args.verbose,
+                            args.limit,
+                            args.status,
+                            args.before,
+                            args.after,
+                        )
+                    )
+            except KeyboardInterrupt:
+                pass
+    else:
+        console.print(
+            get_history(args.verbose, args.limit, args.status, args.before, args.after)
+        )
+
 
 if args.command == "status":
-    get_task_status(args.task_id)
+    if args.watch:
+        with Live(
+            get_task_status(args.task_id), console=console, refresh_per_second=4
+        ) as live:
+            try:
+                while True:
+                    time.sleep(args.watch)
+                    live.update(get_task_status(args.task_id))  # type: ignore
+            except KeyboardInterrupt:
+                pass
+    else:
+        console.print(get_task_status(args.task_id))
 
 if args.command == "trigger":
     trigger_task(args.task_name, args.params)
