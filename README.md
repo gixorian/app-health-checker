@@ -1,110 +1,114 @@
 🛡️ Nerva Engine
 ================
 
-**A High-Performance, Distributed Task Orchestration Framework**
+**The Distributed "Central Nervous System" for Python Automation.**
 
-Nerva is a lightweight, scalable "central nervous system" for distributed task execution. It decouples task triggering from execution, using a **Producer-Consumer** architecture to handle everything from simple pings to heavy computational workloads without blocking your API.
+Nerva is a lightweight, high-performance task orchestration framework designed to bridge the gap between your local development environment and a distributed production-grade engine. It allows you to write pure Python logic on your machine and execute it instantly inside a scalable, Dockerized worker cluster.
 
-🚀 Core Capabilities
---------------------
+🚀 The "Nerva" Workflow
+-----------------------
 
-*   **Decoupled Orchestration**: API instances handle requests while independent Workers handle the heavy lifting.
+Nerva decouples your code from the engine. You don't need to install Nerva as a dependency; you just write code and "push" it to the engine.
+
+1.  **Write**: Create a standard Python function in your tasks/ folder.
     
-*   **Task Registry System**: Easily "plug in" new Python functions without modifying the core engine.
+2.  **Register**: Use the CLI to tell the engine where that function lives.
     
-*   **Relational Persistence**: Full task lifecycle tracking (PENDING → WORKING → COMPLETED) in PostgreSQL.
+3.  **Trigger**: Fire off the task via the CLI or API and track its lifecycle.
     
-*   **High Availability**: Nginx load balancing across multiple API replicas with a persistent Redis broker.
-    
-*   **Observability**: Real-time task monitoring via the Flower dashboard.
-    
-*   **CI/CD Ready**: Automated linting and container builds via GitHub Actions and GHCR.
-    
+
+🛠️ Installation & Setup
+------------------------
+
+### 1\. Launch the Stack
+
+Nerva runs entirely in Docker. Ensure you have Docker and Docker Compose installed.
+
+Bash
+
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # Clone and enter  git clone https://github.com/gixorian/nerva-engine  cd Nerva  # Setup environment (Set USER_ID/GROUP_ID to match your local user)  cp .env.example .env  # Fire it up  docker compose up -d --build   `
+
+### 2\. Prepare the CLI
+
+The CLI is your remote control for the engine.
+
+Bash
+
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   python -m venv venv  source venv/bin/bin/activate  # Or venv\Scripts\activate on Windows  pip install -r requirements.txt   `
+
+🔌 Creating & Registering Tasks
+-------------------------------
+
+### 1\. Write your Task
+
+Create a folder named tasks/ in the project root. Put your logic in a .py file. Nerva tasks are just **pure Python functions**—no decorators or special imports required.
+
+tasks/my\_operations.py:
+
+Python
+
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   def calculate_uptime(server_name: str, threshold: int = 99):      # Your logic here      return f"Server {server_name} is healthy at {threshold}%."   `
+
+### 2\. Register with the CLI
+
+Registration creates a "Blueprint" in the Nerva database.
+
+Bash
+
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # Register a specific task  python cli/nerva.py register tasks/my_operations.py -t calculate_uptime  # OR: Register everything in a file at once  python cli/nerva.py register tasks/my_operations.py --all   `
+
+⚡ Running Tasks
+---------------
+
+### Triggering
+
+You can trigger tasks by name. Pass parameters using the -p flag.
+
+Bash
+
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   python cli/nerva.py trigger CALCULATE_UPTIME -p server_name="prod-01" threshold=98   `
+
+### Monitoring
+
+Track the progress and retrieve results from the database.
+
+Bash
+
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # See all registered blueprints and their required params  python cli/nerva.py tasks  # See recent execution history  python cli/nerva.py history  # Get detailed status/result of a specific task ID  python cli/nerva.py status 4   `
 
 🏗️ Architecture
 ----------------
 
-The system follows a modern Distributed Microservices pattern:
+Nerva is built for high availability and observability:
 
-*   **Gateway**: Nginx acting as a Reverse Proxy/Load Balancer (Port 80).
+*   **Gateway (Nginx)**: Load balances incoming API requests.
     
-*   **API Tier**: Replicated FastAPI services managing the task lifecycle.
+*   **API (FastAPI)**: Manages the task registry and lifecycle.
     
-*   **Message Broker**: Redis 8 managing the asynchronous task queue.
+*   **Broker (Redis 8)**: Orchestrates the asynchronous message queue.
     
-*   **Worker Tier**: Celery Workers executing registered logic (e.g., system checks, data processing).
+*   **Workers (Celery)**: Dynamically imports and executes your tasks/ code.
     
-*   **Database**: PostgreSQL 18 storing permanent task records and results.
+*   **Persistence (PostgreSQL 18)**: Stores blueprints and execution results.
     
-*   **Observability**: Flower (Port 5555) for real-time queue metrics.
-    
-
-🛠️ Quick Start
----------------
-
-### 1\. Clone & Configure
-
-```
-git clone [https://github.com/gixorian/nerva-engine](https://github.com/gixorian/nerva-engine)
-cd nerva-engine
-cp .env.example .env
-```
-
-> **Note:** Update USER\_ID and GROUP\_ID in .env (find them by running id -u and id -g) to ensure proper volume permissions.
-
-### 2\. Launch the Stack
-
-```
-docker compose up -d --build
-```
-
-### 3\. Scaling
-
-Nerva is designed to scale. To handle higher task volumes, scale the worker tier horizontally:
-
-```
-docker compose up -d --scale worker=3
-```
-
-📊 Interaction & Monitoring
----------------------------
-
-### Endpoints
-
-*   **Health Check**: GET /health (Service status)
-    
-*   **Queue Task**: POST /test-worker?seconds=10 (Triggers a registered debug task)
-    
-*   **Task Status**: GET /status/{task\_id} (Check progress and results)
-    
-*   **History**: GET /history (View recent engine activity)
+*   **Dashboard (Flower)**: Real-time queue monitoring at http://localhost:5555.
     
 
-### Dashboards
-
-*   **Interactive API Docs**: [http://localhost/docs](http://localhost/docs)
-    
-*   **Task Monitor (Flower)**: [http://localhost:5555](http://localhost:5555)
-    
-
-🔌 The Registry System
+📊 Scale & Maintenance
 ----------------------
 
-Nerva treats logic as plugins. To add a new capability, simply define a function and register it in nerva/registry.py:
+**Scaling Workers:**Need to process thousands of tasks? Scale the worker tier horizontally:
 
-```
-def my_custom_logic(payload):
-  # Your code here
-  return {"status": "success"}
+Bash
 
-register_task("MY_NEW_TASK", my_custom_logic)
-```
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   docker compose up -d --scale worker=5   `
 
-💾 Persistence & Cleanup
-------------------------
+**Cleanup:**To wipe the database and task history:
 
-Nerva uses named volumes for Redis and PostgreSQL. To wipe the engine state and start fresh:
+Bash
 
-```   
-docker compose down -v
-```
+Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # Using the CLI  python cli/nerva.py purge  # Resetting the entire Docker stack  docker compose down -v   `
+
+### Pro-Tip
+
+Since the Worker uses a Docker Volume mapping (.:/app), any changes you make to your files in tasks/ are reflected **immediately** in the Worker. You don't need to rebuild the container to update your task logic!

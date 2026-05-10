@@ -14,3 +14,10 @@ class TaskRecord(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class TaskDefinition(Base):
+    __tablename__ = "task_definitions"
+    name = Column(String, primary_key=True, index=True)
+    entrypoint = Column(String, nullable=False)
+    params_schema = Column(JSON, nullable=True)

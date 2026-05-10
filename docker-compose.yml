@@ -9,10 +9,13 @@ services:
       - "80:80"
     depends_on:
       - api
+    restart: always
 
   api:
     build: .
     image: nerva:latest
+    volumes:
+      - .:/app
     deploy:
       replicas: 1
     healthcheck:
@@ -36,6 +39,9 @@ services:
 
   worker:
     image: nerva:latest
+    volumes:
+      - .:/app
+    working_dir: /app
     deploy:
       replicas: 1
     environment:

@@ -1,4 +1,5 @@
-from operator import add
+import enum
+from operator import le
 import requests
 import argparse
 import time
@@ -7,6 +8,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.live import Live
 from rich import box
+import os
+import ast
 
 console = Console()
 API_URL = "http://localhost"
@@ -37,15 +40,39 @@ parser.add_argument("--url", help="Override the API URL")
 parser.add_argument("--key", help="Override the API Key")
 parser.add_argument("--json", help="Print the output in raw JSON")
 
-# === History command ===
+# == History ==
 history_parser = subparsers.add_parser(
     "history", help="Get the information of the last LIMIT number of tasks"
 )
+
+# == Status ==
 status_parser = subparsers.add_parser("status", help="Get details for a specific task")
+
+# == Trigger ==
 trigger_parser = subparsers.add_parser("trigger", help="Manually trigger a task")
+
+# == Purge ==
 purge_parser = subparsers.add_parser(
     "purge", help="Delete all data from the PostgreSQL database"
 )
+
+# == Tasks ==
+tasks_parser = subparsers.add_parser(
+    "tasks", help="List all registered task definitions"
+)
+
+# == Register ==
+register_parser = subparsers.add_parser(
+    "register", help="Register a local python file as a task"
+)
+
+
+register_parser.add_argument("file_path", help="Path to the .py file")
+register_parser.add_argument("-t", "--task", help="Specific function name to register")
+register_parser.add_argument(
+    "-a", "--all", action="store_true", help="Register all functions in the file"
+)
+
 
 add_watch_args(history_parser)
 add_watch_args(status_parser)
@@ -244,6 +271,94 @@ def trigger_task(task_name, param_list):
         print(f"{RED}Error:{RESET} {e}")
 
 
+def get_registered_tasks():
+    if args.command == "tasks":
+        response = requests.get(f"{API_URL}/tasks/definitions")
+        defs = response.json()
+
+        table = Table(title="Registered Task Blueprints")
+        table.add_column("Name", style="cyan")
+        table.add_column("Entrypoint", style="magenta")
+        table.add_column("Params", style="green")
+
+        for d in defs:
+            table.add_row(d["name"], d["entrypoint"], str(d["params_schema"]))
+
+        return table
+
+
+def register_tasks(file_path, task_name=None, register_all=False):
+    if not os.path.exists(file_path):
+        console.print(f"[red]Error:[/red] File {file_path} not found.")
+        return
+
+    file_name = os.path.basename(file_path)
+    rel_path = os.path.relpath(file_path, start=os.getcwd())
+    docker_path = os.path.join("/app", rel_path)  # f"/app/{file_name}"
+
+    abs_path = os.path.abspath(file_path)
+
+    found_tasks = {}
+    with open(abs_path, "r") as f:
+        tree = ast.parse(f.read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                params = {}
+
+                defaults = [ast.unparse(d) for d in node.args.defaults]
+                args = node.args.args
+                padding = len(args) - len(defaults)
+
+                for i, arg in enumerate(args):
+                    arg_name = arg.arg
+
+                    arg_type = "any"
+                    if arg.annotation:
+                        arg_type = ast.unparse(arg.annotation)
+
+                    default_val = None
+                    if i >= padding:
+                        default_val = defaults[i - padding]
+
+                    if default_val:
+                        params[arg_name] = f"{arg_type} (default: {default_val})"
+                    else:
+                        params[arg_name] = arg_type
+
+                found_tasks[node.name] = params
+
+    to_register = []
+
+    if register_all:
+        to_register = found_tasks
+        if task_name:
+            console.print(
+                f"[yellow]Note:[/yellow] --all is set, ignoring specific task '{task_name}' and registering everything from {file_name}"
+            )
+    elif task_name:
+        if task_name in found_tasks:
+            to_register = [task_name]
+        else:
+            console.print(
+                f"[red]Error:[/red] Task '{task_name}' not found in {file_path}"
+            )
+            console.print(f"Available tasks: {', '.join(found_tasks)}")
+            return
+    else:
+        console.print("[red]Error:[/red] You must provide either --task or --all")
+        return
+
+    for name in to_register:
+        data = {
+            "name": name.upper(),  # type:ignore
+            "entrypoint": f"{docker_path}:{name}",
+            "params_schema": found_tasks[name],
+        }
+        resp = requests.post(f"{API_URL}/tasks/register", json=data)
+        if resp.status_code == 200:
+            console.print(f"[green]Regsitered:[/green] {name.upper()}")  # type:ignore
+
+
 # Checking subparser commands
 if args.command == "history":
     if args.watch:
@@ -287,3 +402,9 @@ if args.command == "status":
 
 if args.command == "trigger":
     trigger_task(args.task_name, args.params)
+
+if args.command == "tasks":
+    console.print(get_registered_tasks())
+
+if args.command == "register":
+    register_tasks(args.file_path, args.task, args.all)
