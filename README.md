@@ -24,17 +24,27 @@ Nerva decouples your code from the engine. You don't need to install Nerva as a 
 
 Nerva runs entirely in Docker. Ensure you have Docker and Docker Compose installed.
 
-Bash
+```Bash
+# Clone and enter
+git clone https://github.com/gixorian/nerva-engine
+cd Nerva
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # Clone and enter  git clone https://github.com/gixorian/nerva-engine  cd Nerva  # Setup environment (Set USER_ID/GROUP_ID to match your local user)  cp .env.example .env  # Fire it up  docker compose up -d --build   `
+# Setup environment (Set USER_ID/GROUP_ID to match your local user)
+cp .env.example .env
+
+# Fire it up
+docker compose up -d --build
+```
 
 ### 2\. Prepare the CLI
 
 The CLI is your remote control for the engine.
 
-Bash
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   python -m venv venv  source venv/bin/bin/activate  # Or venv\Scripts\activate on Windows  pip install -r requirements.txt   `
+```Bash
+python -m venv venv
+source venv/bin/bin/activate # Or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+```
 
 🔌 Creating & Registering Tasks
 -------------------------------
@@ -45,17 +55,23 @@ Create a folder named tasks/ in the project root. Put your logic in a .py file. 
 
 tasks/my\_operations.py:
 
-Python
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   def calculate_uptime(server_name: str, threshold: int = 99):      # Your logic here      return f"Server {server_name} is healthy at {threshold}%."   `
+```python   
+def calculate_uptime(server_name: str, threshold: int = 99):
+    # Your logic here
+    return f"Server {server_name} is healthy at {threshold}%."
+```
 
 ### 2\. Register with the CLI
 
 Registration creates a "Blueprint" in the Nerva database.
 
-Bash
+```Bash
+# Register a specific task
+python cli/nerva.py register tasks/my_operations.py -t calculate_uptime
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # Register a specific task  python cli/nerva.py register tasks/my_operations.py -t calculate_uptime  # OR: Register everything in a file at once  python cli/nerva.py register tasks/my_operations.py --all   `
+# OR: Register everything in a file at once
+python cli/nerva.py register tasks/my_operations.py --all
+```
 
 ⚡ Running Tasks
 ---------------
@@ -64,17 +80,24 @@ Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQL
 
 You can trigger tasks by name. Pass parameters using the -p flag.
 
-Bash
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   python cli/nerva.py trigger CALCULATE_UPTIME -p server_name="prod-01" threshold=98   `
+```python 
+cli/nerva.py trigger CALCULATE_UPTIME -p server_name="prod-01" threshold=98
+```
 
 ### Monitoring
 
 Track the progress and retrieve results from the database.
 
-Bash
+```Bash
+# See all registered blueprints and their required params
+python cli/nerva.py tasks
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # See all registered blueprints and their required params  python cli/nerva.py tasks  # See recent execution history  python cli/nerva.py history  # Get detailed status/result of a specific task ID  python cli/nerva.py status 4   `
+# See recent execution history
+python cli/nerva.py history
+
+# Get detailed status/result of a specific task ID
+python cli/nerva.py status 4
+```
 
 🏗️ Architecture
 ----------------
@@ -97,17 +120,21 @@ Nerva is built for high availability and observability:
 📊 Scale & Maintenance
 ----------------------
 
-**Scaling Workers:**Need to process thousands of tasks? Scale the worker tier horizontally:
+**Scaling Workers:** Need to process thousands of tasks? Scale the worker tier horizontally:
 
-Bash
+```Bash
+docker compose up -d --scale worker=5
+```
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   docker compose up -d --scale worker=5   `
+**Cleanup:** To wipe the database and task history:
 
-**Cleanup:**To wipe the database and task history:
+```Bash
+# Using the CLI
+python cli/nerva.py purge  
 
-Bash
-
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   # Using the CLI  python cli/nerva.py purge  # Resetting the entire Docker stack  docker compose down -v   `
+Resetting the entire Docker stack
+docker compose down -v
+```
 
 ### Pro-Tip
 
