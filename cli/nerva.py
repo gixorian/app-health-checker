@@ -1,5 +1,3 @@
-import enum
-from operator import le
 import requests
 import argparse
 import time
@@ -40,42 +38,56 @@ parser.add_argument("--url", help="Override the API URL")
 parser.add_argument("--key", help="Override the API Key")
 parser.add_argument("--json", help="Print the output in raw JSON")
 
-# == History ==
+# == History Parser ==
 history_parser = subparsers.add_parser(
     "history", help="Get the information of the last LIMIT number of tasks"
 )
 
-# == Status ==
+# == Status Parser ==
 status_parser = subparsers.add_parser("status", help="Get details for a specific task")
 
-# == Trigger ==
+# == Trigger Parser ==
 trigger_parser = subparsers.add_parser("trigger", help="Manually trigger a task")
 
-# == Purge ==
+# == Purge Parser ==
 purge_parser = subparsers.add_parser(
     "purge", help="Delete all data from the PostgreSQL database"
 )
 
-# == Tasks ==
+# == Tasks Parser ==
 tasks_parser = subparsers.add_parser(
     "tasks", help="List all registered task definitions"
 )
 
-# == Register ==
+# == Register Parser ==
 register_parser = subparsers.add_parser(
     "register", help="Register a local python file as a task"
 )
 
+# == Unregister Parser ==
+unregister_parser = subparsers.add_parser(
+    "unregister", help="Unregister a registered task definition"
+)
 
+# == Unregister Options ==
+unregister_parser.add_argument(
+    "task_name",
+    nargs="?",
+    help="Registered task name to unregister. (Hint: Run 'nerva tasks' to see all registered tasks.)",
+)
+unregister_parser.add_argument(
+    "-a", "--all", action="store_true", help="Unregister all registered tasks"
+)
+
+# == Register Options ==
 register_parser.add_argument("file_path", help="Path to the .py file")
 register_parser.add_argument("-t", "--task", help="Specific function name to register")
 register_parser.add_argument(
     "-a", "--all", action="store_true", help="Register all functions in the file"
 )
 
-
+# == History Options ==
 add_watch_args(history_parser)
-add_watch_args(status_parser)
 
 history_parser.add_argument(
     "-l",
@@ -110,12 +122,14 @@ history_parser.add_argument(
     metavar='"YYYY-MM-DD HH:MM:SS"',
 )
 
-# === Status command ===
+# === Status Options ===
+add_watch_args(status_parser)
+
 status_parser.add_argument(
     "task_id", help="The numerical ID of the task", type=int, metavar="ID"
 )
 
-# === Trigger command ===
+# === Trigger Options ===
 trigger_parser.add_argument(
     "task_name", help="Name of the task to trigger", type=str, metavar="TASK_NAME"
 )
@@ -129,6 +143,7 @@ trigger_parser.add_argument(
 args = parser.parse_args()
 
 
+# == Command Functions ==
 def get_history(
     verbose: bool,
     limit: int,
@@ -139,7 +154,7 @@ def get_history(
     query_params = {"limit": limit, "status": status, "before": before, "after": after}
 
     try:
-        response = requests.get(f"{API_URL}/history", params=query_params)
+        response = requests.get(f"{API_URL}/tasks/history", params=query_params)
         response.raise_for_status()
         data = response.json()
     except Exception as e:
@@ -194,7 +209,7 @@ def get_history(
 
 
 def get_task_status(id: int):
-    response = requests.get(f"{API_URL}/status/{id}")
+    response = requests.get(f"{API_URL}/tasks/status/{id}")
 
     if response.status_code == 404:
         console.print(
@@ -251,14 +266,14 @@ def trigger_task(task_name, param_list):
 
     # Sending the POST request
     try:
-        response = requests.post(f"{API_URL}/trigger", json=payload)
+        response = requests.post(f"{API_URL}/tasks/trigger", json=payload)
         response.raise_for_status()
         task_data = response.json()
         task_id = task_data.get("id")
 
         time.sleep(0.1)
 
-        status_response = requests.get(f"{API_URL}/status/{task_id}")
+        status_response = requests.get(f"{API_URL}/tasks/status/{task_id}")
         status_data = status_response.json()
 
         if status_data["status"] == "FAILED":
@@ -294,7 +309,7 @@ def register_tasks(file_path, task_name=None, register_all=False):
 
     file_name = os.path.basename(file_path)
     rel_path = os.path.relpath(file_path, start=os.getcwd())
-    docker_path = os.path.join("/app", rel_path)  # f"/app/{file_name}"
+    docker_path = os.path.join("/app", rel_path)
 
     abs_path = os.path.abspath(file_path)
 
@@ -354,12 +369,59 @@ def register_tasks(file_path, task_name=None, register_all=False):
             "entrypoint": f"{docker_path}:{name}",
             "params_schema": found_tasks[name],
         }
-        resp = requests.post(f"{API_URL}/tasks/register", json=data)
+        resp = requests.post(f"{API_URL}/tasks/definitions/register", json=data)
         if resp.status_code == 200:
-            console.print(f"[green]Regsitered:[/green] {name.upper()}")  # type:ignore
+            console.print(f"[green]Registered:[/green] {name.upper()}")  # type:ignore
 
 
-# Checking subparser commands
+def unregister_tasks(task_name=None, unregister_all=False):
+    if unregister_all:
+        if task_name:
+            console.print(
+                f"[yellow]Note:[/yellow] --all is set, ignoring specific task '{task_name}' and unregistering all task definitions"
+            )
+        target_name = None
+    elif not task_name:
+        console.print("[red]Error:[/red] You must provide either a TASK_NAME or --all")
+        return
+    else:
+        target_name = task_name.upper()
+
+    params = {"all": "true"} if unregister_all else {"name": target_name}
+
+    try:
+        resp = requests.delete(f"{API_URL}/tasks/definitions/unregister", params=params)
+
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+
+        if resp.status_code == 200:
+            msg = data.get("message", "Unregistered successfully")
+            console.print(f"[green]Success:[/green] {msg}")
+
+        elif resp.status_code == 404:
+            err_msg = data.get("detail", f"Task '{task_name}' not found.")
+            console.print(f"[red]Error:[/red] {err_msg}")
+
+        else:
+            console.print(f"[red]Error {resp.status_code}:[/red] {resp.text}")
+
+    except Exception as e:
+        console.print(f"[red]Network Error:[/red] {str(e)}")
+
+
+def purge_task_history():
+    try:
+        requests.delete(f"{API_URL}/tasks/purge")
+        console.print("[green]Success:[/green] Task History successfully purged.")
+
+    except Exception as e:
+        console.print(f"[red]Error:[/red] {str(e)}")
+
+
+# == Parsing Subparser Commands ==
 if args.command == "history":
     if args.watch:
         with Live(
@@ -385,7 +447,6 @@ if args.command == "history":
             get_history(args.verbose, args.limit, args.status, args.before, args.after)
         )
 
-
 if args.command == "status":
     if args.watch:
         with Live(
@@ -408,3 +469,6 @@ if args.command == "tasks":
 
 if args.command == "register":
     register_tasks(args.file_path, args.task, args.all)
+
+if args.command == "unregister":
+    unregister_tasks(args.task_name, args.all)

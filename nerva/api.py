@@ -1,5 +1,4 @@
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy import exists
 from sqlalchemy.orm import Session
 from nerva.database import SessionLocal, engine, Base
 from nerva.models import TaskDefinition, TaskRecord
@@ -49,7 +48,7 @@ def health_check():
     return {"status": "ok", "service": "Nerva Engine"}
 
 
-@app.get("/status/{task_id}", response_model=TaskSchema)
+@app.get("/tasks/status/{task_id}", response_model=TaskSchema)
 def get_task_status(task_id: int, db: Session = Depends(get_db)):
     task = db.query(TaskRecord).filter(TaskRecord.id == task_id).first()
 
@@ -59,7 +58,7 @@ def get_task_status(task_id: int, db: Session = Depends(get_db)):
     return task
 
 
-@app.get("/history", response_model=List[TaskSchema])
+@app.get("/tasks/history", response_model=List[TaskSchema])
 def get_all_tasks(
     limit: int = 10,
     status: str | None = None,
@@ -88,7 +87,7 @@ def get_all_tasks(
     return query.all()
 
 
-@app.post("/trigger")
+@app.post("/tasks/trigger")
 def trigger_task(data: TriggerRequest, db: Session = Depends(get_db)):
     task = TaskRecord(task_type=data.task_name.upper(), payload=data.params)
 
@@ -110,7 +109,7 @@ def get_task_definitions(db: Session = Depends(get_db)):
     return db.query(TaskDefinition).all()
 
 
-@app.post("/tasks/register")
+@app.post("/tasks/definitions/register")
 def register_task_definition(definition: dict, db: Session = Depends(get_db)):
     existing = (
         db.query(TaskDefinition)
@@ -127,3 +126,38 @@ def register_task_definition(definition: dict, db: Session = Depends(get_db)):
 
     db.commit()
     return {"status": "registered", "task": definition["name"]}
+
+
+@app.delete("/tasks/definitions/unregister")
+def unregister_task_definition(
+    name: str | None = None,
+    all: bool = False,
+    db: Session = Depends(get_db),
+):
+    if all:
+        db.query(TaskDefinition).delete()
+        db.commit()
+        return {"message": "All task definitions unregistered successfully."}
+
+    if name:
+        existing = (
+            db.query(TaskDefinition).filter(TaskDefinition.name == name.upper()).first()
+        )
+
+        if not existing:
+            raise HTTPException(status_code=404, detail=f"Task '{name}' not found.")
+
+        db.delete(existing)
+        db.commit()
+        return {"message": f"Task {name} unregistered."}
+
+    raise HTTPException(
+        status_code=400, detail="Missing parameter: provide 'name' or 'all=true'"
+    )
+
+
+@app.delete("/tasks/history/purge")
+def purge_task_history(db: Session = Depends(get_db)):
+    db.query(TaskRecord).delete()
+    db.commit()
+    return {"message": "Task execution history purged successfully."}
